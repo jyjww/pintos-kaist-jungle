@@ -194,6 +194,8 @@ int filesize (int fd){
 int read (int fd, void *buffer, unsigned length){
 	check_address(buffer);
 
+	off_t bytes_read = -1;
+
 	// stdin 키보드 입력은 파일이 아니기 때문에 직접 읽어온다
 	if (fd == 0){
 		unsigned char *buff = buffer;
@@ -208,11 +210,12 @@ int read (int fd, void *buffer, unsigned length){
 
 	// fd >= 3 인 경우
 	struct file *file = process_get_file(fd);
+
 	if (file == NULL)
 		return -1;
 	
 	lock_acquire(&filesys_lock);
-	off_t bytes_read = file_read(file, buffer, length);
+	bytes_read = file_read(file, buffer, length);
 	lock_release(&filesys_lock);
 
 	return bytes_read;
@@ -220,6 +223,8 @@ int read (int fd, void *buffer, unsigned length){
 
 int write (int fd, const void *buffer, unsigned length){
 	check_address(buffer);
+
+	off_t bytes_write = -1;
 
 	// stdin or fd < 0 인 경우 쓸게 없으니 에러 반환
 	if (fd <= 0)
@@ -235,7 +240,6 @@ int write (int fd, const void *buffer, unsigned length){
 	if (file == NULL)
 		return -1;
 
-	off_t bytes_write = -1;
 	lock_acquire(&filesys_lock);
 	bytes_write = file_write(file, buffer, length);
 	lock_release(&filesys_lock);

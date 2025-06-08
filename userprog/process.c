@@ -23,6 +23,8 @@
 #include "vm/vm.h"
 #endif
 
+#include "userprog/syscall.h"
+
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -50,9 +52,6 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-	
-    char *ptr;
-    strtok_r(file_name, " ", &ptr);
 
 	/* Project 2 : for Test Case */
 	char *ptr;
@@ -374,15 +373,6 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	
-	for (int i = 0; i < curr->fd_idx; i++) {
-		if (curr->fdt[i] != NULL) {
-			close(i); }
-	}
-	
-	file_close(curr->running_f);
-	
-	curr->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 
 	for (int fd = 0; fd < curr->fd_idx; fd++) {
 		close(fd);
@@ -393,7 +383,7 @@ process_exit (void) {
 	palloc_free_multiple(curr->fdt, FDT_PAGES);
 	process_cleanup();
 	sema_up(&curr->wait_sema);
-	// sema_down(&curr->exit_sema);
+	sema_down(&curr->exit_sema);
 }
 
 /* Free the current process's resources. */
@@ -552,6 +542,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
+	lock_acquire(&filesys_lock);
 	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
@@ -648,6 +639,7 @@ load (const char *file_name, struct intr_frame *if_) {
 done:
 	/* We arrive here whether the load is successful or not. */
 	// file_close (file);
+	lock_release(&filesys_lock);
 	return success;
 }
 
