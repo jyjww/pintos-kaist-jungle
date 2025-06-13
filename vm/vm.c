@@ -6,10 +6,11 @@
 #include "threads/mmu.h"
 #include "userprog/exception.h"
 #include "intrinsic.h"
+#include "userprog/syscall.h"
 
 struct list frame_table;
 struct lock frame_lock;
-static struct list_elem *clock_ptr = NULL;
+static struct list_elem *ptr = NULL;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -79,6 +80,9 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			case VM_FILE:
 				initializer = file_backed_initializer;
 				break;
+			default:
+				PANIC("not defined type");
+				break;
 		}
 
 		uninit_new(page, upage, init, type, aux, initializer);
@@ -125,43 +129,39 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	// TODO: The policy for eviction is up to you.
-	
+
 	ASSERT(!list_empty(&frame_table));
 	lock_acquire(&frame_lock);
 	
 	// list를 한 바퀴 돌고도 victim을 못찾은 경우, 강제로 선정하기 위한 포인터
-	struct list_elem *start = clock_ptr;
+	struct list_elem *start = ptr;
 
-	if (clock_ptr == NULL || clock_ptr == list_end(&frame_table))
-		clock_ptr = list_begin(&frame_table);
+	if (ptr == NULL || ptr == list_end(&frame_table))
+		ptr = list_begin(&frame_table);
 
-	start = clock_ptr;
+	start = ptr;
 
 	struct frame *victim = NULL;
-	
 	while(1){
-		victim = list_entry(clock_ptr, struct frame, frame_elem);
+		victim = list_entry(ptr, struct frame, frame_elem);
 		struct page *page = victim->page;
 
+		
 		if(page != NULL && !pml4_is_accessed(thread_current()->pml4, page->va)){
 			break;
 		}
 		if(page != NULL)
 			pml4_set_accessed(thread_current()->pml4, page->va, false);
 
-		clock_ptr = list_next(clock_ptr);
-		if(clock_ptr == list_end(&frame_table))
-			clock_ptr = list_begin(&frame_table);
+		ptr = list_next(ptr);
+		if(ptr == list_end(&frame_table))
+			ptr = list_begin(&frame_table);
 
 		// 찾을 수 없는 경우, 강제로 start를 victim으로 선정.
 		// 최대 한 바퀴만 루프를 돌게 하여 데드락 가능성 차단. swap-anon에서 무한루프 해결
-		if(clock_ptr == start)
+		if(ptr == start)
 			break;
 	}
-
-	// clock_ptr = list_next(clock_ptr);
-	// if(clock_ptr == list_end(&frame_table))
-	// 	clock_ptr = list_begin(&frame_table);
 	
 	lock_release(&frame_lock);
 	return victim;
@@ -171,21 +171,16 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
+
 	struct frame *victim = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
 	// ASSERT(victim != NULL);
 	ASSERT(victim->page != NULL);
 
-	
-	if(!swap_out(victim->page))
-		PANIC("vm_evict : swap out failed");
-	
-	// if(victim->page)
-	// 	swap_out(victim->page);
-	// pml4_clear_page(thread_current()->pml4, victim->page->va);
-	// victim->page->frame = NULL;
-	// victim->page = NULL;
+	if(!swap_out(victim->page)){
+		PANIC("vm_evict : swap out failed");}
 
+	victim->page = NULL;
 	return victim;
 }
 
@@ -227,8 +222,6 @@ vm_stack_growth (void *addr UNUSED) {
 		if(!vm_claim_page(curr->stack_bottom))
 			return;
 	}
-	// printf("GROW stack at %p (rounded to %p)\n", addr, pg_round_down(addr));
-
 }
 
 /* Handle the fault on write_protected page */
@@ -268,7 +261,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		}
 		page = spt_find_page(spt, addr);
 		
-		// printf("FAULT addr: %p, rsp: %p, user: %d, write: %d, not_present: %d\n", addr, f->rsp, user, write, not_present);
 		if(!page || (write && !page->writable))
 			return false;
 		

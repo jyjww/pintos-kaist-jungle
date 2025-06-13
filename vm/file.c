@@ -76,12 +76,8 @@ file_backed_swap_out (struct page *page) {
 		pml4_set_dirty(curr->pml4, page->va, false);
 	}
 	// dirty비트를 초기화한다
-	// list_remove(&page->frame->frame_elem);
 	lock_release(&filesys_lock);
-	// page->frame->page = NULL;
-	// page->frame = NULL;
 	pml4_clear_page(curr->pml4, page->va);
-	// palloc_free_page(page->frame->kva);
 	// free(page->frame);
 	// page->frame = NULL;
 	// 할당된 페이지를 프리한다
@@ -94,9 +90,6 @@ file_backed_destroy (struct page *page) {
 	struct file_page *file_page = &page->file;
 	struct thread *curr = thread_current();
 
-	
-	// void *kva = pml4_get_page(thread_current()->pml4, page->va);
-	// printf("[DEBUG] file_backed_destroy\n");
 	// 프레임이 존재하고 dirty한 경우 write back
 	if(pml4_is_dirty(curr->pml4, page->va)){
 		// printf("[DEBUG] Writing back dirty page: VA=%p\n", page->va);
@@ -108,8 +101,6 @@ file_backed_destroy (struct page *page) {
 	if(page->frame){
 		list_remove(&page->frame->frame_elem);
 		page->frame->page = NULL;
-		// palloc_free_page(page->frame->kva);
-		
 		page->frame = NULL;
 		free(page->frame);
 	}
